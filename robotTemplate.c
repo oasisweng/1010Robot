@@ -5,193 +5,125 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <time.h>
-
-typedef int bool;
-#define true 1
-#define false 0
-
-#define errorMax 1
-
-int initConnection();
-void checkConnection();
-char* sendCommend(char*);
-void goStraight(int, int);
-void rotate(int, int);
-void turn(int, int);
-void readEndoder(int[2]);
-void updateMotorSpeed();
-void stopRobot();
-void drawTrack();
-void setCommands();
-
-int m_sock;
-
-int destPosition[2] = {-1, -1};
-int currentPosition[2] = {-1, -1};
-int m_speed[2];
-
-int positionQueue[20][4];
-
-int commandNumber=0,commandIndex=0;
+#include "robotTemplate.h"
 
 int main()
 {
-    m_sock = initConnection();
+    m_sock = setupConnection();
     checkConnection();
 
-    clock_t timer = clock(), superfastLoopTimer, fastLoopTimer, slowLoopTimer;
-    superfastLoopTimer = fastLoopTimer = slowLoopTimer = clock() * 1000 / CLOCKS_PER_SEC;
+    clock_t timer = clock(), superfastLoopTimer, fastLoopTimer, mediumLoopTimer, slowLoopTimer;
+    superfastLoopTimer = fastLoopTimer = mediumLoopTimer = slowLoopTimer = clock() *1000 / CLOCKS_PER_SEC;
 
-    destPosition[0] = currentPosition[0];
-    destPosition[1] = currentPosition[1];
-    printf("Start: L: %d, D: %d\n",currentPosition[0],destPosition[0]);
-    printf("R: %d, D: %d\n",currentPosition[1],destPosition[1]);
-    drawTrack();
-    setCommands();
-    bool isMissionFinished = false;
+    getCurrentPosition(m_currentPosition);
+    m_destPosition[0] = m_currentPosition[0];
+    m_destPosition[1] = m_currentPosition[1];
 
+#ifdef DEBUG
+    printf("Start: L: %d, D: %d\n",m_currentPosition[0],m_destPosition[0]);
+    printf("Start: R: %d, D: %d\n",m_currentPosition[1],m_destPosition[1]);
+#endif
+
+    bool isMissionAccomplished = true;
+    createMissionList();
     while (1)
     {
-        timer = clock() * 1000 / CLOCKS_PER_SEC;
-
-        if(timer-superfastLoopTimer >= 1)
+        timer = clock() *1000 / CLOCKS_PER_SEC;
+        if(timer-superfastLoopTimer >= 10) //100Hz Loop
         {
-            readEndoder(currentPosition);
-            if(abs(destPosition[0] - currentPosition[0])<= errorMax && abs(destPosition[0] - currentPosition[0])<= errorMax)
-            {
-                stopRobot();
-                if(!isMissionFinished)
-                {
-                    printf("MC L: %d, D: %d\n",currentPosition[0],destPosition[0]);
-                    printf("MC R: %d, D: %d\n",currentPosition[1],destPosition[1]);
-                }
-                isMissionFinished = true;
+            getCurrentPosition(m_currentPosition);
+            //printf("L %d R %d\n",m_currentPosition[0],m_currentPosition[1]);
+            if(!isMissionAccomplished)
+                isMissionAccomplished = checkMissionStatus();
 
-                if(commandIndex<commandNumber)
-                {
-                    destPosition[0] = currentPosition[0] + positionQueue[commandIndex][0];
-                    destPosition[1] = currentPosition[1] + positionQueue[commandIndex][1];
-                    printf("ND: %d\n",destPosition[0]);
-                    printf("ND: %d\n",destPosition[1]);
-                    m_speed[0] = positionQueue[commandIndex][2];
-                    m_speed[1] = positionQueue[commandIndex][3];
-                    updateMotorSpeed();
-                    commandIndex++;
-                    isMissionFinished = false;
-                }
-            }
 
             superfastLoopTimer = timer;
         }
-        else if(timer-fastLoopTimer >= 100)
+        if(timer-fastLoopTimer >= 20) //50Hz Loop
         {
-            // int diff = destPosition[0]>currentPosition[0];
-            // if(abs(diff)<50)
-            // {
-            //     m_speed[0] = diff;
-            //     if(m_speed[0]>10)
-            //         m_speed[0] = 10;
-            //     else if(m_speed[0]<-10)
-            //         m_speed[0] = -10;
-            // }
-            // else
-            // {
-            //     if(diff>0)
-            //     {
-            //         m_speed[0] = 20;
-            //     }
-            //     else
-            //     {
-            //         m_speed[0] = -20;
-            //     }
-            // }
-
-            // diff = destPosition[1]>currentPosition[1];
-            // if(abs(diff)<50)
-            // {
-            //     m_speed[1] = diff;
-            //     if(m_speed[1]>10)
-            //         m_speed[1] = 10;
-            //     else if(m_speed[1]<-10)
-            //         m_speed[1] = -10;
-            // }
-            // else
-            // {
-            //     if(diff>0)
-            //     {
-            //         m_speed[1] = 20;
-            //     }
-            //     else
-            //     {
-            //         m_speed[1] = -20;
-            //     }
-            // }
-
-
-            // if(destPosition[0]>currentPosition[0])
-            // {
-            //     m_speed[0] += 1;
-            // }
-            // else
-            // {
-            //     m_speed[0] -= 1;
-            // }
-
-            // if(destPosition[1]>currentPosition[1])
-            // {
-            //     m_speed[1] += 1;
-            // }
-            // else
-            // {
-            //     m_speed[1] -= 1;
-            // }
-
-            if(!isMissionFinished)
+            if(isMissionAccomplished && m_missionCurrent<m_missionTotal)
             {
-                m_speed[0] = destPosition[0] - currentPosition[0];
-                if(m_speed[0]>50)
-                    m_speed[0] = 50;
-                else if(m_speed[0]<-50)
-                    m_speed[0] = -50;
-                m_speed[1] = destPosition[1] - currentPosition[1];
-                if(m_speed[1]>50)
-                    m_speed[1] = 50;
-                else if(m_speed[1]<-50)
-                    m_speed[1] = -50;
-                m_speed[0] /= 5;
-                m_speed[1] /= 5;
+                m_missionCurrent++;
+                m_destPosition[0] = m_currentPosition[0] + m_missionList[m_missionCurrent].distanceL;
+                m_destPosition[1] = m_currentPosition[1] + m_missionList[m_missionCurrent].distanceR;
+            #ifdef DEBUG
+                printf("NewM L: %d\n",m_destPosition[0]);
+                printf("NewM R: %d\n",m_destPosition[1]);
+            #endif
+                m_speed[0] = m_missionList[m_missionCurrent].speedL;
+                m_speed[1] = m_missionList[m_missionCurrent].speedR;
+
+                updateMotor();
+                isMissionAccomplished = false;
             }
 
-            drawTrack();
             fastLoopTimer = timer;
         }
-        else if(timer-slowLoopTimer >= 200)
+        else if(timer-mediumLoopTimer >= 50) //20Hz Loop
         {
+            int diff[2];
+            diff[0] = m_destPosition[0] - m_currentPosition[0];
+            diff[1] = m_destPosition[1] - m_currentPosition[1];
+
+            printf("DL %d DR %d\n", diff[0], diff[1]);
+
+            if(abs(diff[0])<m_missionList[m_missionCurrent].speedL*2 || abs(diff[1])<m_missionList[m_missionCurrent].speedR*2)
+                decelerateRobot(diff);
+            else
+            {
+                if(diff[0]>0 == m_missionList[m_missionCurrent].distanceL>0)
+                    m_speed[0] = m_missionList[m_missionCurrent].speedL;
+                else
+                    m_speed[0] = -m_missionList[m_missionCurrent].speedL;
+
+                if(diff[1]>0 == m_missionList[m_missionCurrent].distanceR>0)
+                    m_speed[1] = m_missionList[m_missionCurrent].speedR;
+                else
+                    m_speed[1] = -m_missionList[m_missionCurrent].speedR;
+
+                updateMotor();
+            }
+            printTrail();
+
+
+            mediumLoopTimer = timer;
+        }
+        else if(timer-slowLoopTimer >= 400) //5Hz loop
+        {
+        #ifdef DEBUG
             if(m_speed[0]!=0)
-                printf("L: %d S: %d\n",currentPosition[0],m_speed[0]);
+                printf("L: %d S: %d\n",m_currentPosition[0],m_speed[0]);
             if(m_speed[1]!=0)
-                printf("R: %d S: %d\n",currentPosition[1],m_speed[1]);
-            updateMotorSpeed();
+                printf("R: %d S: %d\n",m_currentPosition[1],m_speed[1]);
+        #endif
+            updateMotor();
             slowLoopTimer = timer;
         }
     }
 }
 
-void setCommands()
+void createMissionList()
 {
+    for(int i=0;i<10;i++)
+    {
+        goStraight(600,50);
+        turnRight(90,30,0);
+    }
+
+    //return;
     /// Square
-    //goStraight(600,20);
-    //rotate(211,5);
-    //goStraight(600,20);
-    //rotate(211,5);
-    //goStraight(600,20);
-    //rotate(211,5);
-    //goStraight(800,20);
+
+    //turnRight(365,30,0);
+    //goStraight(600,80);
+    //turnRight(90,40,0);
+    //goStraight(600,50);
+    //turnRight(90,5,0);
+    //goStraight(800,50);
     /// Circle
     //turn(1500,30);
 }
 
-int initConnection()
+int setupConnection()
 {
     struct sockaddr_in s_addr;
     int sock;
@@ -218,9 +150,10 @@ int initConnection()
 void checkConnection()
 {
     int timeOut;
-    while(currentPosition[0] == -1 || currentPosition[1] == -1)
+    int posstion[2] = {-1,-1};
+    while(posstion[0] == -1 || posstion[1] == -1)
     {
-        readEndoder(currentPosition);
+        getCurrentPosition(posstion);
         usleep(100000);
         timeOut++;
         if(timeOut>=10)
@@ -231,95 +164,183 @@ void checkConnection()
     }
 }
 
+void setMotorSpeed(int leftSpeed, int rightSpeed)
+{
+    m_speed[0] = leftSpeed;
+    m_speed[1] = rightSpeed;
+}
+
+void updateMotor()
+{
+    char buffer[80];
+    sprintf(buffer, "M LR %d %d\n", m_speed[0], m_speed[1]);
+    printf(buffer);
+    sendCommend(buffer);
+    readFeedback(buffer);
+}
+
 void stopRobot()
 {
     m_speed[0] = m_speed[1] = 0;
-    updateMotorSpeed();
+    updateMotor();
 }
 
-void updateMotorSpeed()
+void getCurrentPosition(int encoder[2])
 {
-    char command[80];
-    sprintf(command, "M LR %d %d\n", m_speed[0], m_speed[1]);
-    sendCommend(command);
+    char buffer[80];
+    sprintf(buffer, "S MELR\n");
+    sendCommend(buffer);
+    readFeedback(buffer);
+    sscanf(buffer,"S MELR %d %d",&encoder[0],&encoder[1]);
 }
 
-void readEndoder(int encoder[2])
+void printTrail()
 {
-    char command[80];
-    sprintf(command, "S MELR\n");
-    char* feedback = sendCommend(command);
-    sscanf(feedback,"S MELR %d %d",&encoder[0],&encoder[1]);
-
-    return encoder;
+    char buffer[80];
+    sprintf(buffer, "C TRAIL\n");
+    sendCommend(buffer);
+    readFeedback(buffer);
 }
 
-void goStraight(int distance, int speed)
+void sendCommend(char* buffer)
 {
-    positionQueue[commandNumber][0] = distance;
-    positionQueue[commandNumber][1] = distance;
+    write(m_sock, buffer, strlen(buffer));
+}
+
+void readFeedback(char* buffer)
+{
+    memset(buffer, 0, strlen(buffer));
+    read(m_sock, buffer, 80);
+    //printf(feedBack);
+}
+
+void goStraight(int distance, unsigned int speed)
+{
+    m_missionTotal++;
+    Mission newMission;
+    newMission.distanceL = newMission.distanceR = distance;
     if(distance>0)
     {
-        positionQueue[commandNumber][2] = speed;
-        positionQueue[commandNumber][3] = speed;
+        newMission.speedL = newMission.speedR = speed;
     }
     else
     {
-        positionQueue[commandNumber][2] = -speed;
-        positionQueue[commandNumber][3] = -speed;
+        newMission.speedL = newMission.speedR = -speed;
     }
-
-    commandNumber++;
+    m_missionList[m_missionTotal] = newMission;
 }
 
-void rotate(int degree, int speed)
+void turnRight(int degree, unsigned int speed, double radius)
 {
-    positionQueue[commandNumber][0] = degree;
-    positionQueue[commandNumber][1] = -degree;
-    if(degree > 0)
+    m_missionTotal++;
+    Mission newMission;
+
+    if(radius < ROBOT_RADIUS)
+        radius = ROBOT_RADIUS;
+
+    double radius2 = radius-2*ROBOT_RADIUS;
+
+    newMission.distanceL = (double)degree/360 * 2 * Pi* radius;
+    newMission.distanceR = (double)degree/360 * 2 * Pi* radius2;
+
+    if(degree > 0) // Go forward
     {
-        positionQueue[commandNumber][2] = speed;
-        positionQueue[commandNumber][3] = -speed;
+        newMission.speedL = speed;
+        newMission.speedR = speed*(radius2/radius);
+    }
+    else // Go backword
+    {
+        newMission.speedL = -speed;
+        newMission.speedR = -speed*(radius2/radius);
+    }
+
+    m_missionList[m_missionTotal] = newMission;
+}
+
+void turnLeft(int degree, unsigned int speed, double radius)
+{
+    m_missionTotal++;
+    Mission newMission;
+
+    if(radius < ROBOT_RADIUS)
+        radius = ROBOT_RADIUS;
+
+    double radius2 = radius-2*ROBOT_RADIUS;
+
+    newMission.distanceR = (double)degree/360 * 2 * Pi* radius;
+    newMission.distanceL = (double)degree/360 * 2 * Pi* radius2;
+
+    if(degree > 0) // Go forward
+    {
+        newMission.speedR = speed;
+        newMission.speedL = speed*(radius2/radius);
+    }
+    else // Go backword
+    {
+        newMission.speedR = -speed;
+        newMission.speedL = -speed*(radius2/radius);
+    }
+
+    m_missionList[m_missionTotal] = newMission;
+}
+
+bool checkMissionStatus()
+{
+    if(abs(m_destPosition[0] - m_currentPosition[0])<= ERROR_MAX && abs(m_destPosition[0] - m_currentPosition[0])<= ERROR_MAX)
+    {
+        stopRobot();
+    #ifdef DEBUG
+        printf("M%d Done L: %d, D: %d\n",m_missionCurrent,m_currentPosition[0],m_destPosition[0]);
+        printf("M%d Done R: %d, D: %d\n",m_missionCurrent,m_currentPosition[1],m_destPosition[1]);
+    #endif
+        return true;
+    }
+
+    return false;
+}
+
+void decelerateRobot(int diff[2])
+{
+    double ratio;
+
+    if(m_speed[0]!=0)
+    {
+        ratio = m_speed[1]/m_speed[0];
+        if(diff[0]>diff[1])
+        {
+            m_speed[1] = diff[1]/5 + 1;
+            if(diff[1]<0)
+                m_speed[1] -= 2;
+            m_speed[0] = m_speed[1] / ratio;
+        }
+        else
+        {
+            m_speed[0] = diff[0]/5;
+            if(diff[0]<0)
+                m_speed[0] -= 2;
+            m_speed[1] = m_speed[0] * ratio;
+        }
+
+    }
+    else if(m_speed[1]!=0)
+    {
+        ratio = m_speed[0]/m_speed[1];
+
+        if(diff[0]>diff[1])
+        {
+            m_speed[1] = diff[1]/5;
+            m_speed[0] = m_speed[1] * ratio;
+        }
+        else
+        {
+            m_speed[0] = diff[0]/5;
+            m_speed[1] = m_speed[0] / ratio;
+        }
     }
     else
     {
-        positionQueue[commandNumber][2] = -speed;
-        positionQueue[commandNumber][3] = speed;
+
+
     }
-
-    commandNumber++;
-}
-
-void turn(int degree, int speed)
-{
-    positionQueue[commandNumber][0] = degree;
-    positionQueue[commandNumber][1] = 0;
-    if(degree > 0)
-    {
-        positionQueue[commandNumber][2] = speed;
-        positionQueue[commandNumber][3] = 0;
-    }
-    else
-    {
-        positionQueue[commandNumber][2] = -speed;
-        positionQueue[commandNumber][3] = 0;
-    }
-
-    commandNumber++;
-}
-
-void drawTrack()
-{
-    char command[80];
-    sprintf(command, "C TRAIL\n");
-    sendCommend(command);
-}
-
-char* sendCommend(char* command)
-{
-    write(m_sock, command, strlen(command));
-    memset(command, 0, 80);
-    read(m_sock, command, 80);
-    //printf(command);
-    return command;
+    updateMotor();
 }
