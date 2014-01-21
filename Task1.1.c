@@ -104,7 +104,7 @@ int main()
 
 void createMissionList()
 {
-    turnRight(720,100,800);
+    goStraight(600,100);
 }
 
 int setupConnection()
@@ -312,19 +312,15 @@ void decelerateRobot(int diff[2])
 
         if(diff[0]>diff[1])
         {
-            m_speed[1] = diff[1]/5;
+            m_speed[1] -= diff[1]/5;
             m_speed[0] = m_speed[1] * ratio;
         }
         else
         {
-            m_speed[0] = diff[0]/5;
+            m_speed[0] -= diff[0]/5;
             m_speed[1] = m_speed[0] / ratio;
         }
     }
-    else
-    {
 
-
-    }
     updateMotor();
 }
