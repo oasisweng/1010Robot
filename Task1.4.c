@@ -7,6 +7,19 @@
 #include <time.h>
 #include "robotTemplate.h"
 
+int DEFAULT_STRAIGHT_LINE = 600;
+int DEFAULT_CIRCLE_RADIUS = 300;
+int DEFAULT_SPEED = 50;
+int ACCELARATED_SPEED = 70;
+void drawScalableStar(double scale);
+void drawScalableCircle(double scale);
+void drawScalableTriangle(double scale);
+void drawScalableSquare(double scale);
+
+/*
+    MAIN
+    */
+
 int main()
 {
     m_sock = setupConnection();
@@ -105,11 +118,26 @@ int main()
     }
 }
 
-int DEFAULT_STRAIGHT_LINE = 600;
-int DEFAULT_CIRCLE_RADIUS = 300;
-int DEFAULT_SPEED = 50;
-int ACCELARATED_SPEED = 70;
+/*
+    SETUP
+    */
 
+void createMissionList()
+{
+    double scale;
+    printf("How would you like to scale (1.0 gives default image): ");
+    scanf("%lf",&scale);
+    drawScalableStar(scale);
+    drawScalableSquare(scale);
+    drawScalableTriangle(scale);
+    drawScalableCircle(scale);
+    goStraight(800,70);
+
+}
+
+/*
+    AVAIABLE ACTIONS/COMMANDS
+    */
 
 void drawScalableStar(double scale)
 {
@@ -152,18 +180,9 @@ void drawScalableSquare(double scale)
 }
 
 
-void createMissionList()
-{
-    double scale;
-    printf("How would you like to scale (1.0 gives default image): ");
-    scanf("%lf",&scale);
-    drawScalableStar(scale);
-    drawScalableSquare(scale);
-    drawScalableTriangle(scale);
-    drawScalableCircle(scale);
-    goStraight(800,70);
-
-}
+/*
+    HELPER
+    */
 
 int setupConnection()
 {
