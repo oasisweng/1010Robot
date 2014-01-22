@@ -105,44 +105,63 @@ int main()
     }
 }
 
-void drawStar()
+int DEFAULT_STRAIGHT_LINE = 600;
+int DEFAULT_CIRCLE_RADIUS = 300;
+int DEFAULT_SPEED = 50;
+int ACCELARATED_SPEED = 70;
+
+
+void drawScalableStar(double scale)
 {
+    printf("Drawing Star ....\n");
+    int distance = DEFAULT_STRAIGHT_LINE * scale;
     for(int i=0;i<5;i++)
     {
-        goStraight(600,50);
-        turnRight(144,50,0);
+        goStraight(distance,ACCELARATED_SPEED);
+        turnRight(144,DEFAULT_SPEED,0);
     }
 }
 
-void drawCircle()
+void drawScalableCircle(double scale)
 {
-    turnLeft(360,50,400);
+    printf("Drawing Circle ...\n");
+    double radius = DEFAULT_CIRCLE_RADIUS * scale;
+    turnLeft(360,DEFAULT_SPEED,radius);
 }
 
-void drawTriangle()
+void drawScalableTriangle(double scale)
 {
+    printf("Drawing Triangle ...\n");
+    int distance = DEFAULT_STRAIGHT_LINE * scale;
     for(int i=0;i<3;i++)
     {
-        goStraight(600,50);
-        turnRight(120,50,0);
+        goStraight(distance,ACCELARATED_SPEED);
+        turnRight(120,DEFAULT_SPEED,0);
     }
 }
 
-void drawSquare()
+void drawScalableSquare(double scale)
 {
+    printf("Drawing Square ...\n");
+    int distance = DEFAULT_STRAIGHT_LINE * scale;
     for(int i=0;i<4;i++)
     {
-        goStraight(600,50);
-        turnRight(90,50,0);
+        goStraight(distance,ACCELARATED_SPEED);
+        turnRight(90,DEFAULT_SPEED,0);
     }
 }
+
 
 void createMissionList()
 {
-    drawStar();
-    drawSquare();
-    drawTriangle();
-    drawCircle();
+    double scale;
+    printf("How would you like to scale (1.0 gives default image): ");
+    scanf("%lf",&scale);
+    drawScalableStar(scale);
+    drawScalableSquare(scale);
+    drawScalableTriangle(scale);
+    drawScalableCircle(scale);
+    goStraight(800,70);
 
 }
 

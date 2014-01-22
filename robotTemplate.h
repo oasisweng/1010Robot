@@ -21,8 +21,8 @@ typedef struct Mission
 	int speedR;
 }Mission;
 
-/// List of mission, set size to 20 temporarily
-Mission m_missionList[20];
+/// List of mission, set size to 30 temporarily
+Mission m_missionList[30];
 /// Total mission number, and current mission index
 int m_missionTotal=0,m_missionCurrent=0;
 /// Socket for communication
