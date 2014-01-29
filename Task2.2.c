@@ -13,7 +13,7 @@
  */
 
 const int sensor_queue_length = 960;
-int sensor_vals[sensor_queue_length] = {0}; /* Cyclic sensor reading array: 0 is Front Left IR, 1 is Front Right IR,
+int sensor_vals[960] = {0}; /* Cyclic sensor reading array: 0 is Front Left IR, 1 is Front Right IR,
 															2 is Side Left IR, 3 is Side Right IR, 4 is Left Encoder, 5 is Right Encoder
 															6 is Ultra Sonic, 7 is Bumper Front Left, 8 is Bumper Front Right */
 int current_sensor_pointer = 0;// Currently, this value serves both pointer for new sensor value input and sensor value being processed next.
@@ -27,18 +27,18 @@ bool rightWillSweep = true; //bool value indicating if right servo should move
 int current_left_degree = 0; //int value indicating position of left servo
 int current_right_degree = 0; //int value indicating position of right servo
 
-const int TIMER1_FREQ = 40;
-const int TIMER2_FREQ = 30;
-const int TIMER3_FREQ = 20;
-const int TIMER4_FREQ = 10;
+#define TIMER1_FREQ 40;
+#define TIMER2_FREQ 30;
+#define TIMER3_FREQ 20;
+#define TIMER4_FREQ 10;
 
 typedef enum{
 	SEARCH_WALL = 0,
 	WALL_FOLLOW_LEFT = 1,
 	WALL_FOLLOW_RIGHT = 2
-	} STATE;
+	} STATE_t;
 
-STATE cur_state = SEARCH_WALL;
+STATE_t cur_state = SEARCH_WALL;
 
 void updateSensorValues();
 void reportSensorValues();
@@ -47,18 +47,15 @@ void getCurrentPosition(int encoder[2]);
 int main()
 {
 	m_sock = connect_to_robot();
-	printf("init");
-	initialize_robot();
-	clock_t timer = clock(), timer1,timer2,timer3,timer4;
+    initialize_robot();
+    clock_t timer = clock(), timer1,timer2,timer3,timer4;
 	timer1=timer2=timer3=timer4 = clock() *1000 / CLOCKS_PER_SEC;
-
-	set_motors(DEFAULT_SPEED,DEFAULT_SPEED);
 	while (1)
 	{
 		timer = clock() *1000 / CLOCKS_PER_SEC; //Value in millisec
-		
+        set_motors(DEFAULT_SPEED,DEFAULT_SPEED);
 		sweepIR(TIMER1_FREQ); //Sweep IR sensors in pace with sensor update
-		
+        
 		if(abs(timer-timer1) >= TIMER1_FREQ) //25HZ, this will update sensor value (GP2D12 refreshes every 38ms, SRF08 refreshes at most 70ms)
 		{
 			updateSensorValues();
@@ -70,13 +67,13 @@ int main()
 				case SEARCH_WALL:{
 					if (sensor_vals[current_sensor_pointer]<=WALL_THRESHOLD){
 						leftWillSweep = false;
-						STATE = WALL_FOLLOW_LEFT;
+						cur_state = WALL_FOLLOW_LEFT;
 					}
 					if (sensor_vals[current_sensor_pointer+1]<=WALL_THRESHOLD){
 						rightWillSweep = false;
-						STATE = WALL_FOLLOW_RIGHT;
+						cur_state = WALL_FOLLOW_RIGHT;
 					}
-						 break;
+                    break;
 				}
 				case WALL_FOLLOW_LEFT:{
 					if (sensor_vals[current_sensor_pointer]<WALL_THRESHOLD){
@@ -104,15 +101,16 @@ int main()
 					}
 					break;
 				}
-				 
+                    
 				default:
 					break;
 			}
-			
-			current_sensor_pointer += 8;
-					
 		}
+        current_sensor_pointer += 9;
+
 	}
+
+	return 0;
 }
 
 /*
@@ -169,14 +167,14 @@ void sweepIR(int freq){
 	double degree_per_turn = 180 / freq;
 	if (leftWillSweep){
 		current_left_degree += degree_per_turn;
-		current_left_degree = current_left_degree % 180 - 90;
-		set_ir_angle(LEFT,current_left_degree);
+		current_left_degree = current_left_degree % 180;
+		set_ir_angle(LEFT,current_left_degree-90);
 	}
 		
 	if (rightWillSweep){
-		current_right_degree -= degree_per_turn;
-		current_right_degree = current_right_degree % 180 - 90;
-		set_ir_angle(RIGHT,current_right_degree);
+		current_right_degree += degree_per_turn;
+		current_right_degree = current_right_degree % 180;
+		set_ir_angle(RIGHT,current_right_degree-90);
 	}
 }
 
