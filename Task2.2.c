@@ -5,6 +5,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <time.h>
+#include <math.h>
 #include "picomms.h"
 #include "roboTemp2.h"
 
@@ -12,25 +13,27 @@
  MAIN
  */
 
-const int sensor_queue_length = 960;
-int sensor_vals[960] = {0}; /* Cyclic sensor reading array: 0 is Front Left IR, 1 is Front Right IR,
+#define sensor_queue_length 963
+int sensor_vals[sensor_queue_length] = {0}; /* Cyclic sensor reading array: 0 is Front Left IR, 1 is Front Right IR,
 															2 is Side Left IR, 3 is Side Right IR, 4 is Left Encoder, 5 is Right Encoder
 															6 is Ultra Sonic, 7 is Bumper Front Left, 8 is Bumper Front Right */
 int current_sensor_pointer = 0;// Currently, this value serves both pointer for new sensor value input and sensor value being processed next.
-const int WALL_THRESHOLD = 35;
+const int WALL_THRESHOLD = 30;
+const int SIDE_THRESHOLD = 10;
+const int US_THRESHOLD = 30;
 const int DEFAULT_SPEED = 20;
-const int ACCELARATED_SPEED = 21;
-const int SLOWED_SPEED = 19;
+const int ACCELARATED_SPEED = 23;
+const int SLOWED_SPEED = 17;
 
 bool leftWillSweep = true; //bool value indicating if left servo should move
 bool rightWillSweep = true; //bool value indicating if right servo should move
-int current_left_degree = 0; //int value indicating position of left servo
-int current_right_degree = 0; //int value indicating position of right servo
+int current_left_degree = 45; //int value indicating position of left servo
+int current_right_degree = 90; //int value indicating position of right servo
 
-#define TIMER1_FREQ 40;
-#define TIMER2_FREQ 30;
-#define TIMER3_FREQ 20;
-#define TIMER4_FREQ 10;
+#define TIMER1_FREQ 90
+#define TIMER2_FREQ 30
+#define TIMER3_FREQ 20
+#define TIMER4_FREQ 1
 
 typedef enum{
 	SEARCH_WALL = 0,
@@ -44,70 +47,92 @@ void updateSensorValues();
 void reportSensorValues();
 void sweepIR(int freq);
 void getCurrentPosition(int encoder[2]);
-int main()
-{
+int main() {
 	m_sock = connect_to_robot();
-    initialize_robot();
-    clock_t timer = clock(), timer1,timer2,timer3,timer4;
+	initialize_robot();
+	usleep(1000);
+	clock_t timer = clock(), timer1,timer2,timer3,timer4;
 	timer1=timer2=timer3=timer4 = clock() *1000 / CLOCKS_PER_SEC;
 	while (1)
 	{
-		timer = clock() *1000 / CLOCKS_PER_SEC; //Value in millisec
-        set_motors(DEFAULT_SPEED,DEFAULT_SPEED);
 		sweepIR(TIMER1_FREQ); //Sweep IR sensors in pace with sensor update
-        
-		if(abs(timer-timer1) >= TIMER1_FREQ) //25HZ, this will update sensor value (GP2D12 refreshes every 38ms, SRF08 refreshes at most 70ms)
-		{
+		timer = clock() *1000 / CLOCKS_PER_SEC; //Value in millisec
+		//printf("%i",abs(timer-timer1));
+		
+		if (abs(timer-timer4)>=TIMER4_FREQ){
 			updateSensorValues();
 			reportSensorValues();
-			timer1 = timer;
-			
-			//currently, it will also adjust robot's speed
 			switch (cur_state) {
 				case SEARCH_WALL:{
-					if (sensor_vals[current_sensor_pointer]<=WALL_THRESHOLD){
-						leftWillSweep = false;
-						cur_state = WALL_FOLLOW_LEFT;
-					}
-					if (sensor_vals[current_sensor_pointer+1]<=WALL_THRESHOLD){
-						rightWillSweep = false;
-						cur_state = WALL_FOLLOW_RIGHT;
-					}
-                    break;
+					int left_ir = sensor_vals[current_sensor_pointer];
+					int right_ir = sensor_vals[current_sensor_pointer+1];
+					printf("left:%i,%i",current_left_degree,left_ir);
+					printf("right:%i,%i",current_right_degree,right_ir);
+					if (current_left_degree<=45&&current_left_degree>=-60)
+						if (left_ir<=WALL_THRESHOLD){
+							leftWillSweep = false;
+							cur_state = WALL_FOLLOW_LEFT;
+						}
+					if (current_right_degree>=-45&&current_right_degree<=60)
+						if (right_ir<=WALL_THRESHOLD){
+							rightWillSweep = false;
+							cur_state = WALL_FOLLOW_RIGHT;
+						}
+					set_motors(DEFAULT_SPEED,DEFAULT_SPEED);
+					printf("S\n");
 				}
+					break;
 				case WALL_FOLLOW_LEFT:{
-					if (sensor_vals[current_sensor_pointer]<WALL_THRESHOLD){
-						set_motor(0,ACCELARATED_SPEED);
-					} else if (sensor_vals[current_sensor_pointer] == WALL_THRESHOLD){
-						set_motor(0,DEFAULT_SPEED);
-					} else if (sensor_vals[current_sensor_pointer]>WALL_THRESHOLD){
-						if (sensor_vals[current_sensor_pointer]>WALL_THRESHOLD*2){
-							set_motor(0,SLOWED_SPEED/2);
-						} else
-							set_motor(0,SLOWED_SPEED);
-					}
-					break;
+					//if side sensor is in range, following with side sensor
+					int side_val = sensor_vals[current_sensor_pointer+2];
+					int front_val = sensor_vals[current_sensor_pointer];
+					int us_val = sensor_vals[current_sensor_pointer+6];
+					if (us_val<US_THRESHOLD)
+						set_motors(ACCELARATED_SPEED,-ACCELARATED_SPEED);
+					else if (side_val==40)
+						set_motors(0,ACCELARATED_SPEED);
+					else if (front_val<WALL_THRESHOLD||side_val<SIDE_THRESHOLD){
+						printf(". %i %i",front_val,side_val);
+							set_motors(ACCELARATED_SPEED,DEFAULT_SPEED);
+					}else if (front_val == WALL_THRESHOLD || side_val==SIDE_THRESHOLD)
+						set_motors(DEFAULT_SPEED,DEFAULT_SPEED);
+					else if (front_val>WALL_THRESHOLD||(side_val<40&&side_val>SIDE_THRESHOLD)){
+							set_motors(SLOWED_SPEED,ACCELARATED_SPEED);
+					} else
+						cur_state = SEARCH_WALL;
+					printf("L\n");
 				}
+					break;
 				case WALL_FOLLOW_RIGHT:{
-					if (sensor_vals[current_sensor_pointer+1]<WALL_THRESHOLD){
-						set_motor(1,ACCELARATED_SPEED);
-					} else if (sensor_vals[current_sensor_pointer+1] == WALL_THRESHOLD){
-						set_motor(1,DEFAULT_SPEED);
-					} else if (sensor_vals[current_sensor_pointer+1]>WALL_THRESHOLD){
-						if (sensor_vals[current_sensor_pointer+1]>WALL_THRESHOLD*2){
-							set_motor(1,SLOWED_SPEED/2);
-						} else
-							set_motor(1,SLOWED_SPEED);
-					}
-					break;
+					//if side sensor is in range, following with side sensor
+					int side_val = sensor_vals[current_sensor_pointer+3];
+					int front_val = sensor_vals[current_sensor_pointer+1];
+					int us_val = sensor_vals[current_sensor_pointer+6];
+					if (us_val<US_THRESHOLD)
+						set_motors(-ACCELARATED_SPEED,ACCELARATED_SPEED);
+					else if (side_val==40)
+						set_motors(ACCELARATED_SPEED,0);
+					else if (front_val<WALL_THRESHOLD||side_val<SIDE_THRESHOLD)
+							set_motors(DEFAULT_SPEED,ACCELARATED_SPEED);
+					else if (front_val == WALL_THRESHOLD||side_val==SIDE_THRESHOLD)
+						set_motors(DEFAULT_SPEED,DEFAULT_SPEED);
+					else if (front_val>WALL_THRESHOLD&&side_val<40){
+							set_motors(ACCELARATED_SPEED,SLOWED_SPEED);
+					} else
+						cur_state = SEARCH_WALL;
+					printf("R\n");
 				}
-                    
+					break;
+					
 				default:
 					break;
 			}
+			current_sensor_pointer += 9;
+			current_sensor_pointer %= sensor_queue_length;
+			//printf("c_s_p: %i\n",current_sensor_pointer);
+			timer4 = timer;
 		}
-        current_sensor_pointer += 9;
-
+		
 	}
 
 	return 0;
@@ -116,8 +141,7 @@ int main()
 /*
  AVAIABLE ACTIONS/COMMANDS
  */
-void updateSensorValues()
-{
+void updateSensorValues() {
 	int flir;
 	int frir;
 	int slir;
@@ -130,19 +154,19 @@ void updateSensorValues()
 	int error;
 	error = get_front_ir_dists(&flir,&frir);
 	if (error<0)
-		printf("An error occurred, error code = %i",error);
+		printf("FRONTIR: An error occurred, error code = %i\n",error);
 	error = get_side_ir_dists(&slir,&srir);
 	if (error<0)
-		printf("An error occurred, error code = %i",error);
+		printf("SIDEIR: An error occurred, error code = %i\n",error);
 	error = check_bumpers(&lbump,&rbump);
 	if (error<0)
-		printf("An error occurred, error code = %i",error);
+		printf("BUMP: An error occurred, error code = %i\n",error);
 	error = get_motor_encoders(&lenc,&renc);
-	if (error==0)
-		printf("An error occurred, error code = %i",error);
+	if (error<0)
+		printf("ENC:An error occurred, error code = %i\n",error);
 	us = get_us_dist();
 	if (us==500)
-		printf("An error occurred, error code = %i",error);
+		printf("US:An error occurred, error code = %i\n",error);
 	sensor_vals[current_sensor_pointer] = flir;
 	sensor_vals[current_sensor_pointer+1] = frir;
 	sensor_vals[current_sensor_pointer+2] = slir;
@@ -154,27 +178,40 @@ void updateSensorValues()
 	sensor_vals[current_sensor_pointer+8] = rbump;
 }
 
-void reportSensorValues()
-{
+void reportSensorValues(){
 	int i = current_sensor_pointer;
-	printf("Frt Lft IR: %i Frt Rt IR: %i Sd Lft IR: %i Sd Rt IR: %i",
+	printf("Frt Lft IR: %i Frt Rt IR: %i Sd Lft IR: %i Sd Rt IR: %i\n",
 			 sensor_vals[i],sensor_vals[i+1],sensor_vals[i+2],sensor_vals[i+3]);
-	printf("US: %i Lft Enc: %i Rt Enc: %i",sensor_vals[i+6],sensor_vals[i+4],sensor_vals[i+5]);
-	printf("Lft Bump: %i Rt Bump: %i",sensor_vals[i+7],sensor_vals[i+8]);
+	printf("US: %i Lft Enc: %i Rt Enc: %i\n",sensor_vals[i+6],sensor_vals[i+4],sensor_vals[i+5]);
+	//printf("Lft Bump: %i Rt Bump: %i\n",sensor_vals[i+7],sensor_vals[i+8]);
 }
 
+bool l_sweep_back = true;
+bool r_sweep_back = true;
 void sweepIR(int freq){
 	double degree_per_turn = 180 / freq;
 	if (leftWillSweep){
-		current_left_degree += degree_per_turn;
-		current_left_degree = current_left_degree % 180;
-		set_ir_angle(LEFT,current_left_degree-90);
+		if (l_sweep_back)
+			current_left_degree -= degree_per_turn;
+		else
+			current_left_degree += degree_per_turn;
+		if (current_left_degree >= 45)
+			l_sweep_back = true;
+		if (current_left_degree <= -90)
+			l_sweep_back = false;
+		set_ir_angle(LEFT,current_left_degree);
 	}
 		
 	if (rightWillSweep){
-		current_right_degree += degree_per_turn;
-		current_right_degree = current_right_degree % 180;
-		set_ir_angle(RIGHT,current_right_degree-90);
+		if (r_sweep_back)
+			current_right_degree -= degree_per_turn;
+		else
+			current_right_degree += degree_per_turn;
+		if (current_right_degree >= 90)
+			r_sweep_back = true;
+		if (current_right_degree <= -45)
+			r_sweep_back = false;
+		set_ir_angle(RIGHT,current_right_degree);
 	}
 }
 

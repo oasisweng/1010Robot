@@ -402,7 +402,7 @@ int connect_to_robot() {
 
 
 void initialize_robot() {
-  set_ir_angle(LEFT, 0);
-  set_ir_angle(RIGHT, 0);
+  set_ir_angle(LEFT, 45);
+  set_ir_angle(RIGHT, 90);
 }
 
