@@ -22,23 +22,8 @@ typedef int bool;
 #define DEBUG
 
 /// Socket for communication
-int m_sock;
-/// Esteblish Connection
-/// return: socket
-int setupConnection();
-/// Check whether connection is esteblished with checking encoder feedback
-void checkConnection();
-/// Set Motor Speed Globally
-void setMotorSpeed(int leftSpeed, int rightSpeed);
-/// Update Motor as motor will going to sleep without receiving command for setting speed
-void updateMotor();
-/// Stops robot instantly
-void stopRobot();
+int sock;
 /// Draw a dot at present position
 void printTrail();
-/// Send Command to robot
-void sendCommend(char* buffer);
-/// Read robot feedback
-void readFeedback(char* buffer);
 
 #endif
